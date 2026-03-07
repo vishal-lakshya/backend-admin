@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+alembic
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+pydantic[email]
+pydantic-settings
+python-dotenv
+firebase-admin
+google-auth
+google-auth-oauthlib
+httpx
+emails
+twilio
