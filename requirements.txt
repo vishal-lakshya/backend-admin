@@ -16,3 +16,5 @@ httpx
 emails
 twilio
 boto3
+urllib3<3
+chardet<6
