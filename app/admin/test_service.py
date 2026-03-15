@@ -9,29 +9,15 @@ from sqlalchemy.orm import Session
 from app.admin.models import AdminExam, AdminSubject, AdminTestSeries, AdminUser
 from app.admin.schemas import SubjectOut, TestQuestionUploadIn, TestSeriesAnalyticsOut, TestSeriesBootstrapOut, TestSeriesCreateOut, TestSeriesListOut, TestSeriesOut
 from app.admin.test_storage import save_test_question_payloads
+from app.user.models import UserTestAttempt
 
 
 TEST_TYPE_OPTIONS = ['Full Length Mock', 'Topic Test', 'CSAT', 'Mains GS']
 ACCESS_LEVEL_OPTIONS = ['all_users', 'pro_elite', 'elite_only']
-
-def _is_test_expired(test: AdminTestSeries, now: datetime | None = None) -> bool:
-    if test.status == 'archived' or test.status == 'draft' or not test.scheduled_at:
-        return False
-    current = now or datetime.utcnow()
-    end_at = test.scheduled_at.timestamp() + (max(int(test.duration_minutes or 0), 0) * 60)
-    return current.timestamp() >= end_at
-
+DISPLAY_MODE_OPTIONS = ['live', 'scheduled', 'exam_based', 'subject_based']
 
 def _reconcile_test_statuses(db: Session) -> None:
-    now = datetime.utcnow()
-    changed = False
-    rows = db.execute(select(AdminTestSeries).where(AdminTestSeries.status == 'scheduled')).scalars().all()
-    for item in rows:
-        if _is_test_expired(item, now):
-            item.status = 'archived'
-            changed = True
-    if changed:
-        db.commit()
+    return None
 
 
 def _effective_status(test: AdminTestSeries) -> str:
@@ -39,8 +25,6 @@ def _effective_status(test: AdminTestSeries) -> str:
         return 'archived'
     if test.status == 'draft':
         return 'draft'
-    if _is_test_expired(test):
-        return 'archived'
     if test.scheduled_at and test.scheduled_at <= datetime.utcnow():
         return 'live'
     return 'scheduled'
@@ -52,6 +36,7 @@ def _serialize_test(db: Session, test: AdminTestSeries) -> TestSeriesOut:
         id=test.id,
         name=test.name,
         test_type=test.test_type,
+        display_mode=(test.display_mode or 'live'),
         subject_id=test.subject_id,
         subject_name=subject.name if subject else 'Mixed',
         question_count=test.question_count,
@@ -96,6 +81,7 @@ def test_bootstrap(db: Session) -> TestSeriesBootstrapOut:
         subjects=subject_rows,
         test_types=TEST_TYPE_OPTIONS,
         access_levels=ACCESS_LEVEL_OPTIONS,
+        display_modes=DISPLAY_MODE_OPTIONS,
     )
 
 
@@ -130,11 +116,20 @@ def test_analytics(db: Session) -> TestSeriesAnalyticsOut:
     rows = db.execute(select(AdminTestSeries)).scalars().all()
     live_now = sum(1 for item in rows if _effective_status(item) == 'live')
     scheduled = sum(1 for item in rows if _effective_status(item) == 'scheduled')
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    attempts = db.execute(select(UserTestAttempt)).scalars().all()
+    attempts_today = sum(1 for item in attempts if item.created_at and item.created_at >= today_start)
+    completion_values = [
+        (float(item.answered_count or 0) / float(item.total_questions)) * 100.0
+        for item in attempts
+        if int(item.total_questions or 0) > 0
+    ]
+    avg_completion = round(sum(completion_values) / len(completion_values), 1) if completion_values else 0.0
     return TestSeriesAnalyticsOut(
         live_now=live_now,
         scheduled=scheduled,
-        attempts_today=0,
-        avg_completion=0.0,
+        attempts_today=attempts_today,
+        avg_completion=avg_completion,
     )
 
 
@@ -144,6 +139,7 @@ def create_test(
     current_user: AdminUser,
     name: str,
     test_type: str,
+    display_mode: str,
     subject_id: int | None,
     question_count: int | None,
     duration_minutes: int,
@@ -159,10 +155,20 @@ def create_test(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Test name is required.')
     if test_type not in TEST_TYPE_OPTIONS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid test type.')
+    if display_mode not in DISPLAY_MODE_OPTIONS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid display mode.')
     if access_level not in ACCESS_LEVEL_OPTIONS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid access level.')
     if subject_id is not None and not db.get(AdminSubject, subject_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid subject id.')
+    if display_mode in {'exam_based', 'subject_based'} and subject_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Subject is required for exam-based and subject-based test series.')
+    if display_mode == 'scheduled' and not save_as_draft and scheduled_at is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Schedule date and time are required for scheduled test series.')
+
+    normalized_schedule = scheduled_at.replace(microsecond=0) if scheduled_at else None
+    if not save_as_draft and display_mode != 'scheduled' and normalized_schedule is None:
+        normalized_schedule = datetime.utcnow().replace(microsecond=0)
     if not file_name.lower().endswith('.json'):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Upload a .json question file.')
 
@@ -219,10 +225,11 @@ def create_test(
     test = AdminTestSeries(
         name=name.strip(),
         test_type=test_type,
+        display_mode=display_mode,
         subject_id=subject_id,
         question_count=uploaded_question_count,
         duration_minutes=duration_minutes,
-        scheduled_at=scheduled_at,
+        scheduled_at=normalized_schedule,
         access_level=access_level,
         positive_marks=positive_marks,
         negative_marks=negative_marks,

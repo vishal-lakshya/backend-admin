@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.admin.models import AdminSubject, UserSubscription
+from app.admin.models import AdminSubject, AdminTestSeries, UserSubscription
 from app.admin.schemas import (
     AnalyticsDeviceBreakdownOut,
     AnalyticsFunnelStepOut,
@@ -19,7 +19,7 @@ from app.admin.schemas import (
     AnalyticsStatOut,
     AnalyticsSubjectAttemptOut,
 )
-from app.user.models import User, UserPracticeAttempt, UserQuestionBookmark, UserRefreshToken
+from app.user.models import User, UserPracticeAttempt, UserQuestionBookmark, UserRefreshToken, UserTestAttempt
 from app.user.security import now_utc
 
 
@@ -57,9 +57,11 @@ def analytics_overview(db: Session, *, range_days: int) -> AnalyticsOverviewOut:
     day_start = datetime(now.year, now.month, now.day)
     users = db.execute(select(User)).scalars().all()
     attempts = db.execute(select(UserPracticeAttempt)).scalars().all()
+    test_attempts = db.execute(select(UserTestAttempt)).scalars().all()
     bookmarks = db.execute(select(UserQuestionBookmark)).scalars().all()
     refresh_tokens = db.execute(select(UserRefreshToken)).scalars().all()
     subjects = {row.id: row.name for row in db.execute(select(AdminSubject)).scalars().all()}
+    tests = {row.id: row for row in db.execute(select(AdminTestSeries)).scalars().all()}
     subscriptions = db.execute(select(UserSubscription)).scalars().all()
     online_user_ids = {
         row.user_id for row in refresh_tokens
@@ -71,6 +73,9 @@ def analytics_overview(db: Session, *, range_days: int) -> AnalyticsOverviewOut:
         if row.attempted_at >= day_start:
             daily_active_ids.add(row.user_id)
     for row in bookmarks:
+        if row.created_at >= day_start:
+            daily_active_ids.add(row.user_id)
+    for row in test_attempts:
         if row.created_at >= day_start:
             daily_active_ids.add(row.user_id)
     for row in refresh_tokens:
@@ -92,6 +97,9 @@ def analytics_overview(db: Session, *, range_days: int) -> AnalyticsOverviewOut:
     retained_ids: set[int] = set()
     for row in attempts:
         if row.user_id and row.attempted_at >= now - timedelta(days=30):
+            retained_ids.add(row.user_id)
+    for row in test_attempts:
+        if row.user_id and row.created_at >= now - timedelta(days=30):
             retained_ids.add(row.user_id)
     for row in bookmarks:
         if row.user_id and row.created_at >= now - timedelta(days=30):
@@ -115,6 +123,9 @@ def analytics_overview(db: Session, *, range_days: int) -> AnalyticsOverviewOut:
     for row in attempts:
         if _within_range(row.attempted_at, range_start):
             growth_active_counter[_date_key(row.attempted_at)].add(row.user_id)
+    for row in test_attempts:
+        if _within_range(row.created_at, range_start):
+            growth_active_counter[_date_key(row.created_at)].add(row.user_id)
     for row in bookmarks:
         if _within_range(row.created_at, range_start):
             growth_active_counter[_date_key(row.created_at)].add(row.user_id)
@@ -139,6 +150,7 @@ def analytics_overview(db: Session, *, range_days: int) -> AnalyticsOverviewOut:
     email_verified = sum(1 for user in users if user.is_email_verified)
     phone_verified = sum(1 for user in users if user.is_phone_verified)
     attempted_user_ids = {row.user_id for row in attempts}
+    attempted_user_ids.update(row.user_id for row in test_attempts)
     active_subscription_user_ids = {
         row.user_id
         for row in subscriptions
@@ -156,6 +168,13 @@ def analytics_overview(db: Session, *, range_days: int) -> AnalyticsOverviewOut:
     for row in attempts:
         if _within_range(row.attempted_at, range_start):
             subject_counter[row.subject_id] += 1
+    for row in test_attempts:
+        if not _within_range(row.created_at, range_start):
+            continue
+        test = tests.get(row.test_id)
+        subject_id = test.subject_id if test else None
+        if subject_id:
+            subject_counter[subject_id] += 1
     top_subjects = [
         AnalyticsSubjectAttemptOut(
             subject_name=subjects.get(subject_id, f'Subject {subject_id}'),
@@ -182,6 +201,9 @@ def analytics_overview(db: Session, *, range_days: int) -> AnalyticsOverviewOut:
     for row in attempts:
         if _within_range(row.attempted_at, range_start):
             hour_counter[row.attempted_at.hour] += 1
+    for row in test_attempts:
+        if _within_range(row.created_at, range_start):
+            hour_counter[row.created_at.hour] += 1
     for row in refresh_tokens:
         if _within_range(row.created_at, range_start):
             hour_counter[row.created_at.hour] += 1
@@ -204,6 +226,9 @@ def analytics_overview(db: Session, *, range_days: int) -> AnalyticsOverviewOut:
     for row in attempts:
         if row.attempted_at >= heatmap_start:
             heatmap_counter[_date_key(row.attempted_at)] += 1
+    for row in test_attempts:
+        if row.created_at >= heatmap_start:
+            heatmap_counter[_date_key(row.created_at)] += 1
     for row in bookmarks:
         if row.created_at >= heatmap_start:
             heatmap_counter[_date_key(row.created_at)] += 1

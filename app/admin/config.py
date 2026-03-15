@@ -3,12 +3,13 @@ from functools import lru_cache
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.db_config import get_database_url
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
 
     APP_ENV: str = 'development'
-    DATABASE_URL: str = 'postgresql+psycopg2://postgres:password@localhost:5433/postgres'
+    DATABASE_URL: str = get_database_url()
 
     SECRET_KEY: str = 'change-this-secret-key'
     ALGORITHM: str = 'HS256'
@@ -45,20 +46,6 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_env(cls, value: str) -> str:
         return value.strip().lower()
-
-    @field_validator('DATABASE_URL', mode='before')
-    @classmethod
-    def normalize_database_url(cls, value: str) -> str:
-        clean = str(value or '').strip()
-        if not clean:
-            raise ValueError('DATABASE_URL is required')
-        if (clean.startswith("'") and clean.endswith("'")) or (clean.startswith('"') and clean.endswith('"')):
-            clean = clean[1:-1].strip()
-        if clean.startswith('postgres://'):
-            clean = f'postgresql+psycopg2://{clean[len("postgres://"):]}'
-        elif clean.startswith('postgresql://'):
-            clean = f'postgresql+psycopg2://{clean[len("postgresql://"):]}'
-        return clean
 
     @field_validator('ACCESS_TOKEN_EXPIRE_MINUTES')
     @classmethod

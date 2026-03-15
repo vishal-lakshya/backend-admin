@@ -7,10 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.admin.models import AdminExam, AdminPyqPaper, AdminUser
 from app.admin.pyq_storage import (
+    build_pyq_pdf_bytes,
+    build_pyq_pdf_file_name,
     create_download_url,
     delete_object,
     load_pyq_questions,
     save_pyq_paper_file,
+    save_generated_pyq_pdf,
     save_pyq_questions,
 )
 from app.admin.schemas import (
@@ -304,13 +307,36 @@ def get_pyq_download_url(db: Session, pyq_id: int, asset: str) -> PyqAssetDownlo
     paper = db.get(AdminPyqPaper, pyq_id)
     if not paper:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='PYQ paper not found.')
+    exam = db.get(AdminExam, paper.exam_id)
 
     normalized = asset.strip().lower()
     if normalized == 'paper':
-        if not paper.paper_file_key:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='This PYQ does not have a paper file.')
+        if paper.paper_file_key:
+            return PyqAssetDownloadOut(
+                url=create_download_url(paper.paper_file_key, file_name=paper.paper_file_name or 'paper.pdf'),
+                asset='paper',
+            )
+        if not paper.questions_file_key:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='This PYQ does not have a paper file or question data.')
+        questions = load_pyq_questions(paper.questions_file_key)
+        if not questions:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='This PYQ does not have readable question data.')
+        generated_key = save_generated_pyq_pdf(
+            paper.id,
+            build_pyq_pdf_bytes(
+                title=paper.title,
+                exam_name=exam.name if exam else '-',
+                year=paper.year,
+                paper_type=paper.paper_type,
+                paper_set=paper.paper_set,
+                questions=questions,
+            ),
+        )
         return PyqAssetDownloadOut(
-            url=create_download_url(paper.paper_file_key, file_name=paper.paper_file_name or 'paper'),
+            url=create_download_url(
+                generated_key,
+                file_name=build_pyq_pdf_file_name(paper.title, paper.year),
+            ),
             asset='paper',
         )
     if normalized == 'questions':

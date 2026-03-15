@@ -130,6 +130,7 @@ class AdminTestSeries(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(180), index=True)
     test_type: Mapped[str] = mapped_column(String(60), index=True)
+    display_mode: Mapped[str] = mapped_column(String(40), default='live', index=True)
     subject_id: Mapped[int | None] = mapped_column(ForeignKey('admin_subjects.id', ondelete='SET NULL'), nullable=True, index=True)
     question_count: Mapped[int] = mapped_column(Integer, default=0)
     duration_minutes: Mapped[int] = mapped_column(Integer, default=60)
@@ -179,6 +180,18 @@ class SubscriptionPlan(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     code: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    section: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    duration_value: Mapped[int] = mapped_column(Integer, default=1)
+    duration_unit: Mapped[str] = mapped_column(String(20), default='month')
+    price_type: Mapped[str] = mapped_column(String(20), default='permanent', index=True)
+    price: Mapped[float] = mapped_column(Float, default=0.0)
+    discount_percent: Mapped[float] = mapped_column(Float, default=0.0)
+    what_is_covered: Mapped[str | None] = mapped_column(Text, nullable=True)
+    what_is_not_covered: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access_scope: Mapped[str] = mapped_column(String(30), default='full', index=True)
+    access_exam_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    access_subject_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    access_items: Mapped[list[str]] = mapped_column(JSON, default=list)
     monthly_price: Mapped[float] = mapped_column(Float, default=0.0)
     annual_price: Mapped[float] = mapped_column(Float, default=0.0)
     annual_monthly_price: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -240,3 +253,32 @@ class PlatformSetting(Base):
     audit_log_retention_days: Mapped[int] = mapped_column(Integer, default=90)
     lock_account_on_repeated_failures: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AdminBroadcastNotification(Base):
+    __tablename__ = 'admin_broadcast_notifications'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String(180), index=True)
+    message: Mapped[str] = mapped_column(Text)
+    audience_type: Mapped[str] = mapped_column(String(30), default='all', index=True)
+    audience_filters: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(30), default='active', index=True)
+    created_by_admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey('admin_users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UserNotificationRead(Base):
+    __tablename__ = 'user_notification_reads'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    notification_id: Mapped[int] = mapped_column(ForeignKey('admin_broadcast_notifications.id', ondelete='CASCADE'), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), index=True)
+    read_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)

@@ -45,6 +45,7 @@ def get_tests(
 async def create_new_test(
     name: str = Form(...),
     test_type: str = Form(...),
+    display_mode: str = Form(...),
     subject_id: int | None = Form(default=None),
     question_count: int | None = Form(default=None),
     duration_minutes: int = Form(...),
@@ -64,6 +65,7 @@ async def create_new_test(
         current_user=current_user,
         name=name,
         test_type=test_type,
+        display_mode=display_mode,
         subject_id=subject_id,
         question_count=question_count,
         duration_minutes=duration_minutes,

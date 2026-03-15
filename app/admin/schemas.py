@@ -496,6 +496,7 @@ class TestSeriesOut(BaseModel):
     id: int
     name: str
     test_type: str
+    display_mode: str
     subject_id: int | None
     subject_name: str
     question_count: int
@@ -530,6 +531,7 @@ class TestSeriesBootstrapOut(BaseModel):
     subjects: list[SubjectOut]
     test_types: list[str]
     access_levels: list[str]
+    display_modes: list[str]
 
 
 class TestSeriesCreateOut(BaseModel):
@@ -766,6 +768,26 @@ class SubscriptionPlanOut(BaseModel):
     id: int
     name: str
     code: str
+    section: str | None
+    duration_value: int
+    duration_unit: str
+    price_type: str
+    price: float
+    discount_percent: float
+    final_price: float
+    duration_label: str
+    section_label: str
+    what_is_covered: str | None
+    what_is_not_covered: str | None
+    covered_items: list[str]
+    not_covered_items: list[str]
+    access_scope: str
+    access_scope_label: str
+    access_exam_ids: list[int]
+    access_subject_ids: list[int]
+    access_exam_names: list[str]
+    access_subject_names: list[str]
+    access_items: list[str]
     monthly_price: float
     annual_price: float
     annual_monthly_price: float | None
@@ -778,6 +800,76 @@ class SubscriptionPlanOut(BaseModel):
 
 class SubscriptionPlanListOut(BaseModel):
     items: list[SubscriptionPlanOut]
+
+
+class SubscriptionPlanBootstrapOut(BaseModel):
+    exams: list[ExamOut]
+    subjects: list[SubjectOut]
+
+
+class SubscriptionPlanUpdateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+    code: str = Field(min_length=2, max_length=40)
+    section: str | None = Field(default=None, max_length=80)
+    duration_value: int = Field(ge=1, le=3650)
+    duration_unit: str = Field(min_length=3, max_length=20)
+    price_type: str = Field(default='permanent', min_length=8, max_length=20)
+    price: float = Field(ge=0)
+    discount_percent: float = Field(ge=0, le=100)
+    what_is_covered: str | None = Field(default=None, max_length=4000)
+    what_is_not_covered: str | None = Field(default=None, max_length=4000)
+    access_scope: str = Field(min_length=4, max_length=30)
+    access_exam_ids: list[int] = Field(default_factory=list)
+    access_subject_ids: list[int] = Field(default_factory=list)
+    access_items: list[str] = Field(default_factory=list)
+    monthly_price: float = Field(ge=0)
+    annual_price: float = Field(ge=0)
+    annual_monthly_price: float | None = Field(default=None, ge=0)
+    description: str | None = Field(default=None, max_length=2000)
+    is_active: bool
+    sort_order: int = Field(ge=0, le=1000)
+
+    @field_validator('name', 'code', 'section', 'description', 'what_is_covered', 'what_is_not_covered')
+    @classmethod
+    def normalize_plan_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        clean = value.strip()
+        return clean or None
+
+    @field_validator('duration_unit')
+    @classmethod
+    def normalize_duration_unit(cls, value: str) -> str:
+        clean = value.strip().lower()
+        if clean not in {'day', 'month', 'year'}:
+            raise ValueError('duration_unit must be day, month, or year')
+        return clean
+
+    @field_validator('price_type')
+    @classmethod
+    def normalize_price_type(cls, value: str) -> str:
+        clean = value.strip().lower()
+        if clean not in {'permanent', 'temporary'}:
+            raise ValueError('price_type must be permanent or temporary')
+        return clean
+
+    @field_validator('access_scope')
+    @classmethod
+    def normalize_access_scope(cls, value: str) -> str:
+        clean = value.strip().lower()
+        if clean not in {'full', 'exam', 'subject'}:
+            raise ValueError('access_scope must be full, exam, or subject')
+        return clean
+
+    @field_validator('access_items')
+    @classmethod
+    def normalize_access_items(cls, value: list[str]) -> list[str]:
+        items = []
+        for item in value or []:
+            clean = str(item).strip()
+            if clean:
+                items.append(clean)
+        return items
 
 
 class PaymentAnalyticsOut(BaseModel):
@@ -983,3 +1075,162 @@ class AnalyticsOverviewOut(BaseModel):
     most_active_time_meta: str
     top_states: list[AnalyticsStateOut]
     activity_heatmap: list[AnalyticsHeatmapCellOut]
+
+
+class BroadcastNotificationCreateRequest(BaseModel):
+    title: str = Field(min_length=3, max_length=180)
+    message: str = Field(min_length=5, max_length=5000)
+    audience_type: str = Field(min_length=3, max_length=30)
+    audience_filters: dict = Field(default_factory=dict)
+    email_addresses: list[EmailStr] = Field(default_factory=list)
+    phone_numbers: list[str] = Field(default_factory=list)
+    exam_ids: list[int] = Field(default_factory=list)
+    subject_ids: list[int] = Field(default_factory=list)
+    subscription_plan_codes: list[str] = Field(default_factory=list)
+    starts_at: datetime | None = None
+    expires_at: datetime | None = None
+    status: str = Field(default='active', min_length=3, max_length=30)
+
+    @field_validator('audience_type', 'status')
+    @classmethod
+    def normalize_notification_text(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator('phone_numbers')
+    @classmethod
+    def normalize_phone_numbers(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for item in value:
+            norm = ''.join(ch for ch in str(item) if ch.isdigit() or ch == '+')
+            if norm and norm not in cleaned:
+                cleaned.append(norm)
+        return cleaned
+
+    @field_validator('subscription_plan_codes')
+    @classmethod
+    def normalize_plan_codes(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for item in value:
+            norm = str(item).strip().lower()
+            if norm and norm not in cleaned:
+                cleaned.append(norm)
+        return cleaned
+
+
+class BroadcastNotificationUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=3, max_length=180)
+    message: str | None = Field(default=None, min_length=5, max_length=5000)
+    audience_type: str | None = Field(default=None, min_length=3, max_length=30)
+    audience_filters: dict | None = None
+    email_addresses: list[EmailStr] | None = None
+    phone_numbers: list[str] | None = None
+    exam_ids: list[int] | None = None
+    subject_ids: list[int] | None = None
+    subscription_plan_codes: list[str] | None = None
+    starts_at: datetime | None = None
+    expires_at: datetime | None = None
+    status: str | None = Field(default=None, min_length=3, max_length=30)
+
+    @field_validator('audience_type', 'status')
+    @classmethod
+    def normalize_notification_text(cls, value: str | None) -> str | None:
+        return value.strip().lower() if value is not None else value
+
+    @field_validator('phone_numbers')
+    @classmethod
+    def normalize_phone_numbers(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        cleaned: list[str] = []
+        for item in value:
+            norm = ''.join(ch for ch in str(item) if ch.isdigit() or ch == '+')
+            if norm and norm not in cleaned:
+                cleaned.append(norm)
+        return cleaned
+
+    @field_validator('subscription_plan_codes')
+    @classmethod
+    def normalize_plan_codes(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        cleaned: list[str] = []
+        for item in value:
+            norm = str(item).strip().lower()
+            if norm and norm not in cleaned:
+                cleaned.append(norm)
+        return cleaned
+
+
+class BroadcastNotificationOut(BaseModel):
+    id: int
+    title: str
+    message: str
+    audience_type: str
+    audience_filters: dict
+    status: str
+    recipient_count: int
+    starts_at: datetime | None
+    expires_at: datetime | None
+    created_by_admin_id: int | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class BroadcastNotificationListOut(BaseModel):
+    items: list[BroadcastNotificationOut]
+    total: int
+    skip: int
+    limit: int
+
+
+class NotificationTargetOptionOut(BaseModel):
+    id: int
+    label: str
+    code: str | None = None
+
+
+class NotificationPlanOptionOut(BaseModel):
+    id: int
+    code: str
+    label: str
+
+
+class AdminNotificationBootstrapOut(BaseModel):
+    exams: list[NotificationTargetOptionOut]
+    subjects: list[NotificationTargetOptionOut]
+    subscription_plans: list[NotificationPlanOptionOut]
+
+
+class AdminAlertItemOut(BaseModel):
+    id: str
+    category: str
+    severity: str
+    title: str
+    message: str
+    href: str | None = None
+    created_at: datetime
+
+
+class AdminNotificationOverviewOut(BaseModel):
+    unread_count: int
+    items: list[AdminAlertItemOut]
+    refund_requests: int
+    expiring_subscriptions: int
+    failed_payments: int
+    locked_users: int
+    active_broadcasts: int
+
+
+class UserNotificationOut(BaseModel):
+    id: int
+    title: str
+    message: str
+    created_at: datetime
+    starts_at: datetime | None
+    expires_at: datetime | None
+    is_read: bool
+
+
+class UserNotificationListOut(BaseModel):
+    items: list[UserNotificationOut]
+    unread_count: int

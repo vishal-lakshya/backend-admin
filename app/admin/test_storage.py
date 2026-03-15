@@ -39,3 +39,18 @@ def save_test_question_payloads(test_id: int, payloads: list[dict[str, Any]]) ->
         ContentEncoding='gzip',
     )
     return key
+
+
+def load_test_question_payloads(test_id: int) -> list[dict[str, Any]]:
+    key = test_questions_object_key(test_id)
+    obj = _s3_bucket().Object(key).get()
+    raw = obj['Body'].read()
+    with gzip.GzipFile(fileobj=BytesIO(raw), mode='rb') as gz:
+        content = gz.read().decode('utf-8')
+    rows: list[dict[str, Any]] = []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        rows.append(json.loads(line))
+    return rows

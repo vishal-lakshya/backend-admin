@@ -16,7 +16,7 @@ from app.admin.schemas import (
     DashboardSubjectBreakdownOut,
     DashboardSubscriptionSplitOut,
 )
-from app.user.models import User, UserPracticeAttempt
+from app.user.models import User, UserPracticeAttempt, UserTestAttempt
 from app.user.security import now_utc
 
 
@@ -36,6 +36,7 @@ def dashboard_overview(db: Session) -> DashboardOverviewOut:
 
     users = db.execute(select(User).order_by(User.created_at.desc())).scalars().all()
     attempts = db.execute(select(UserPracticeAttempt).order_by(UserPracticeAttempt.attempted_at.desc())).scalars().all()
+    test_attempts = db.execute(select(UserTestAttempt).order_by(UserTestAttempt.created_at.desc())).scalars().all()
     subscriptions = db.execute(select(UserSubscription).order_by(UserSubscription.created_at.desc())).scalars().all()
     plans = db.execute(select(SubscriptionPlan)).scalars().all()
     transactions = db.execute(select(PaymentTransaction).order_by(PaymentTransaction.created_at.desc())).scalars().all()
@@ -54,6 +55,9 @@ def dashboard_overview(db: Session) -> DashboardOverviewOut:
     for item in attempts:
         if item.attempted_at >= thirty_days_ago:
             active_user_ids.add(item.user_id)
+    for item in test_attempts:
+        if item.created_at >= thirty_days_ago:
+            active_user_ids.add(item.user_id)
 
     monthly_revenue = sum(row.amount for row in transactions if row.status == 'success' and row.created_at >= month_start)
     total_questions = sum(1 for row in question_rows if str(row.get('status', '')).lower() == 'published')
@@ -62,6 +66,9 @@ def dashboard_overview(db: Session) -> DashboardOverviewOut:
     for item in attempts:
         if item.attempted_at >= fourteen_days_ago:
             attempt_day_counter[item.attempted_at.strftime('%d %b')] += 1
+    for item in test_attempts:
+        if item.created_at >= fourteen_days_ago:
+            attempt_day_counter[item.created_at.strftime('%d %b')] += 1
     bar_points: list[DashboardBarPointOut] = []
     cursor = fourteen_days_ago
     for _ in range(14):
@@ -118,6 +125,8 @@ def dashboard_overview(db: Session) -> DashboardOverviewOut:
         recent_activity.append(DashboardActivityOut(tone='gold', text=f'Payment {tx.status}: {tx.plan_code or "plan"} {tx.amount:.2f} {tx.currency}', timestamp=tx.created_at))
     for test in tests[:3]:
         recent_activity.append(DashboardActivityOut(tone='amber', text=f'Test created: {test.name}', timestamp=test.created_at))
+    for item in test_attempts[:3]:
+        recent_activity.append(DashboardActivityOut(tone='green', text=f'Test attempt recorded for test #{item.test_id}', timestamp=item.created_at))
     recent_activity.sort(key=lambda item: item.timestamp, reverse=True)
     recent_activity = recent_activity[:8]
 
@@ -126,6 +135,7 @@ def dashboard_overview(db: Session) -> DashboardOverviewOut:
         user_attempts = user_attempt_map.get(user.id, [])
         correct = sum(1 for item in user_attempts if item.is_correct)
         accuracy = round((correct / len(user_attempts)) * 100, 2) if user_attempts else 0.0
+        tests_taken = sum(1 for item in test_attempts if item.user_id == user.id and item.status == 'submitted')
         sub = latest_subscription_by_user.get(user.id)
         plan_name = 'Free'
         if sub and sub.plan_id in plan_map:
@@ -138,7 +148,7 @@ def dashboard_overview(db: Session) -> DashboardOverviewOut:
                 full_name=full_name,
                 email=user.email,
                 plan=plan_name,
-                tests_taken=0,
+                tests_taken=tests_taken,
                 accuracy=accuracy,
                 joined_at=user.created_at,
                 status=status,
@@ -149,7 +159,11 @@ def dashboard_overview(db: Session) -> DashboardOverviewOut:
         generated_at=now,
         total_active_users=DashboardStatOut(value=len(active_user_ids), label='Total Active Users', change_text='Last 30 days'),
         revenue_this_month=DashboardStatOut(value=round(monthly_revenue, 2), label='Revenue This Month', change_text='Successful transactions'),
-        tests_attempted_today=DashboardStatOut(value=0, label='Tests Attempted Today', change_text='Test attempt tracking pending'),
+        tests_attempted_today=DashboardStatOut(
+            value=sum(1 for item in test_attempts if item.created_at >= today_start),
+            label='Tests Attempted Today',
+            change_text='User test attempts created today',
+        ),
         total_questions=DashboardStatOut(value=total_questions, label='Total Questions', change_text='Published question bank'),
         test_attempts_last_14_days=bar_points,
         recent_activity=recent_activity,
