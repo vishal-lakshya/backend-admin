@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 15
     SIGNUP_OTP_EXPIRE_MINUTES: int = 5
 
-    FRONTEND_BASE_URL: str = 'http://127.0.0.1:5500'
-    CORS_ORIGINS: str = 'http://127.0.0.1:5500,http://localhost:5500'
+    FRONTEND_BASE_URL: str = 'https://backend-admin-khaki.vercel.app/'
+    CORS_ORIGINS: str = 'https://backend-admin-khaki.vercel.app/'
 
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 587
