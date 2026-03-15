@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.admin.models import AdminExam, AdminSubject, AdminTestSeries, AdminUser
 from app.admin.schemas import SubjectOut, TestQuestionUploadIn, TestSeriesAnalyticsOut, TestSeriesBootstrapOut, TestSeriesCreateOut, TestSeriesListOut, TestSeriesOut
 from app.admin.test_storage import save_test_question_payloads
-from app.user.models import UserTestAttempt
+from app.admin.user_models import UserTestAttempt
 
 
 TEST_TYPE_OPTIONS = ['Full Length Mock', 'Topic Test', 'CSAT', 'Mains GS']

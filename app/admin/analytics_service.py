@@ -19,8 +19,8 @@ from app.admin.schemas import (
     AnalyticsStatOut,
     AnalyticsSubjectAttemptOut,
 )
-from app.user.models import User, UserPracticeAttempt, UserQuestionBookmark, UserRefreshToken, UserTestAttempt
-from app.user.security import now_utc
+from app.admin.user_models import User, UserPracticeAttempt, UserQuestionBookmark, UserRefreshToken, UserTestAttempt
+from app.admin.security import now_utc
 
 
 def _device_type(user_agent: str | None) -> str:

@@ -30,8 +30,8 @@ from app.admin.schemas import (
     UserNotificationListOut,
     UserNotificationOut,
 )
-from app.user.models import User, UserPracticeAttempt, UserTestAttempt
-from app.user.security import now_utc
+from app.admin.user_models import User, UserPracticeAttempt, UserTestAttempt
+from app.admin.security import now_utc
 
 
 VALID_AUDIENCE_TYPES = {'all', 'email', 'phone', 'exam', 'subject', 'subscription'}

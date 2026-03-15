@@ -20,8 +20,8 @@ from app.admin.schemas import (
     AdminManagedUserPerformanceOut,
     AdminManagedUserUpdateRequest,
 )
-from app.user.models import User, UserPracticeAttempt, UserQuestionBookmark, UserRefreshToken
-from app.user.security import hash_password, now_utc
+from app.admin.user_models import User, UserPracticeAttempt, UserQuestionBookmark, UserRefreshToken
+from app.admin.security import hash_password, now_utc
 
 
 def _safe_question_payload(question_id: str) -> dict:

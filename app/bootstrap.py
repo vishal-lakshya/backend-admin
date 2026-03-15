@@ -2,7 +2,7 @@ from sqlalchemy import inspect, select, text
 
 from app.admin.database import Base, engine
 from app.admin import models as admin_models  # noqa: F401
-from app.user import models as user_models  # noqa: F401
+from app.admin import user_models as app_user_models  # noqa: F401
 from app.admin.models import SubscriptionPlan
 
 

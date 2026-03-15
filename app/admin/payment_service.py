@@ -19,8 +19,8 @@ from app.admin.schemas import (
     SubscriptionPlanOut,
     SubscriptionPlanUpdateRequest,
 )
-from app.user.models import User
-from app.user.security import now_utc
+from app.admin.user_models import User
+from app.admin.security import now_utc
 
 
 def _comma_items(value: str | None) -> list[str]:
