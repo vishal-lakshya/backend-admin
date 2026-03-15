@@ -1,8 +1,8 @@
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent  # /admin
+ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))
+    sys.path.insert(0, str(ROOT))
 
-from admin.main import app  # noqa: E402
+from main import app  # noqa: E402
