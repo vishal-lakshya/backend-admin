@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 15
     SIGNUP_OTP_EXPIRE_MINUTES: int = 5
 
-    FRONTEND_BASE_URL: str = 'https://backend-admin-khaki.vercel.app/'
-    CORS_ORIGINS: str = 'https://backend-admin-khaki.vercel.app/'
+    FRONTEND_BASE_URL: str = 'https://frontend-admin-ruby.vercel.app'
+    CORS_ORIGINS: str = 'https://frontend-admin-ruby.vercel.app,http://127.0.0.1:5500,http://localhost:5500'
 
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 587
@@ -54,12 +54,14 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [item.strip() for item in self.CORS_ORIGINS.split(',') if item.strip()]
+        return [item.strip().rstrip('/') for item in self.CORS_ORIGINS.split(',') if item.strip()]
 
     @property
     def cors_origin_regex(self) -> str | None:
         if self.APP_ENV == 'development':
-            return r'^https?://(localhost|127\.0\.0\.1)(:\d+)?$'
+            return r'^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://frontend-admin(?:-[a-z0-9-]+)?\.vercel\.app$'
+        if self.APP_ENV in {'staging', 'production'}:
+            return r'^https://frontend-admin(?:-[a-z0-9-]+)?\.vercel\.app$'
         return None
 
 
